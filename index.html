@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bootstrap demo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+<body>
+
+<div class="container"> 
+
+<form id="getForm">
+
+    <br>
+    <button type="button" class="btn btn-primary" onclick="submitGetForm()">Submit GET Request</button>
+    <p id="getPara"></p>
+</form>
+
+
+
+<!-- <form id="putForm">
+    <label for="threshold"> Value:</label>
+    <input type="number" id="threshold" name="threshold" required>
+    <br>
+    <button type="button" onclick="submitPutForm()">Submit</button>
+</form> -->
+
+
+
+<table class="table">
+    <thead>
+      <tr>
+        <th scope="col">#</th>
+        <th scope="col">Alert Rule</th>
+        <th scope="col">Warning Threshold</th>
+        <th scope="col">Error Threshold</th>
+        <th scope="col">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th scope="row">1</th>
+        <td>CPU Usage</td>
+        <td><input type="number" id="warningThreshold" value=""></td>
+        <td><input type="number" id="errorThreshold" value=""></td>
+        <td><button class="btn btn-primary" onclick="updateThresholds()">Update</button></td>
+        <td><button class="btn btn-primary" onclick="sendPutRequest()">Send PUT</button></td>
+      </tr>
+      <!-- <tr>
+        <th scope="row">2</th>
+        <td>Memory Usage</td>
+        <td><input type="number" placeholder="70"></td>
+        <td><input type="number" placeholder=""></td>
+        <td><button class="btn btn-primary" onclick="submitPutForm()">Update</button></td>
+      </tr>
+      <tr>
+        <th scope="row">3</th>
+        <td>Number of Trades</td>
+        <td><input type="number" placeholder="50"></td>
+        <td><input type="number" placeholder=""></td>
+        <td><button class="btn btn-primary" onclick="submitPutForm()">Update</button></td>
+      </tr> -->
+    </tbody>
+  </table>
+
+  <p id="result-container"></p>
+
+</div>
+
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+
+<script>
+
+    var warningThresholdInput = document.getElementById("warningThreshold");
+    var errorThresholdInput = document.getElementById("errorThreshold");
+
+    let getPara= document.getElementById('getPara');
+
+    let updatedJsonData=null;
+
+
+    function makeRequest(url, method, data, callback) {
+        var xhr = new XMLHttpRequest();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200 || xhr.status === 201) {
+                    callback(null, xhr.responseText);
+                } else {
+                    callback(xhr.statusText, null);
+                }
+            }
+        };
+        xhr.open(method, url, true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.send(data);
+    }
+
+
+
+
+    function updateThresholds() {
+        var warningThreshold = parseFloat(warningThresholdInput.value);
+        var errorThreshold = parseFloat(errorThresholdInput.value);
+
+        if (!isNaN(warningThreshold) && !isNaN(errorThreshold)) {
+            var apiUrl = "http://10.99.21.182:9201/_plugins/_alerting/monitors/iOI3OY0BhdZhswUPLtsl";
+
+            makeRequest(apiUrl, "GET", null, function (error, data) {
+                if (!error) {
+                    var jsonData = JSON.parse(data);
+
+                    jsonData.monitor.triggers[0].query_level_trigger.condition.script.source =
+                        jsonData.monitor.triggers[0].query_level_trigger.condition.script.source
+                            .replace(/def WARNING_THRESHOLD = \d+;/, "def WARNING_THRESHOLD = " + warningThreshold + ";")
+                            .replace(/def ERROR_THRESHOLD = \d+;/, "def ERROR_THRESHOLD = " + errorThreshold + ";");
+
+                    updatedJsonData = jsonData;
+                } else {
+                    document.getElementById("result-container").innerHTML = "Error updating thresholds: " + error;
+                }
+            });
+        } else {
+            document.getElementById("result-container").innerHTML = "Please enter valid threshold values.";
+        }
+    }
+
+
+
+
+
+function submitGetForm() {
+
+        // Your GET API endpoint URL
+        var apiUrl = "http://10.99.21.182:9201/_plugins/_alerting/monitors/iOI3OY0BhdZhswUPLtsl";
+
+        // Perform a GET request using Fetch API
+        fetch(apiUrl, {
+            method: "GET",
+            headers: {
+                "Content-Type": "application/json",
+                // Add any other headers as needed
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Handle the response as needed
+            getPara.innerHTML=data.monitor.triggers[0].query_level_trigger.condition.script.source.substring(3,27) + data.monitor.triggers[0].query_level_trigger.condition.script.source.substring(32,53);
+
+            // Get the input element by its ID
+            var warningThreshold = document.getElementById("warningThreshold");
+            var errorThreshold = document.getElementById("errorThreshold");
+
+            // Update the value property
+            warningThreshold.value = parseFloat(data.monitor.triggers[0].query_level_trigger.condition.script.source.substring(24,27));
+
+            // update error threshold
+            errorThreshold.value = parseFloat(data.monitor.triggers[0].query_level_trigger.condition.script.source.substring(50,53));
+
+
+            
+            console.log(data);
+
+
+            
+
+
+        })
+        .catch(error => {
+            // Handle errors
+            console.error("Error:", error);
+        });
+    }
+
+
+    function sendPutRequest() {
+    if (updatedJsonData) {
+        var apiUrl = "http://10.99.21.182:9201/_plugins/_alerting/monitors/iOI3OY0BhdZhswUPLtsl";
+        var jsonDataString = JSON.stringify(updatedJsonData.monitor);  // Send only the 'monitor' part
+
+        // Print the final PUT request payload to the console
+        console.log("PUT Request Payload:", jsonDataString);
+
+        makeRequest(apiUrl, "PUT", jsonDataString, function (error, data) {
+            if (!error) {
+                document.getElementById("result-container").innerHTML = "PUT request successful!";
+            } else {
+                document.getElementById("result-container").innerHTML = "Error sending PUT request: " + error + "<br>" + data;
+            }
+        });
+    } else {
+        document.getElementById("result-container").innerHTML = "Please update thresholds first.";
+    }
+}
+
+</script>
+
+</body>
+</html>
+
+

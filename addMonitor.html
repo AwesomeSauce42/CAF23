@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alert Configuration Form</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+
+</head>
+<body>
+    <br> <br>   
+    <form id="alertConfigForm">
+        <label for="alertName">Alert Name:</label>
+        <input type="text" id="alertName" name="alertName" required><br>
+
+        <label for="warningThreshold">Warning Threshold:</label>
+        <input type="number" id="warningThreshold" name="warningThreshold" required><br>
+
+        <label for="errorThreshold">Error Threshold:</label>
+        <input type="number" id="errorThreshold" name="errorThreshold" required><br>
+
+        <label for="metric">Metric:</label>
+        <input type="text" id="metric" name="metric" required><br>
+
+        <button type="button" onclick="submitForm()">Submit</button>
+    </form>
+
+    <script>
+        function submitForm() {
+            // Get values from form inputs
+            const alertName = document.getElementById('alertName').value;
+            const warningThreshold = document.getElementById('warningThreshold').value;
+            const errorThreshold = document.getElementById('errorThreshold').value;
+            const metric = document.getElementById('metric').value;
+
+            // Create JSON payload
+            const payload = {
+    type: "monitor",
+    schema_version: 0,
+    name: alertName,
+    monitor_type: "query_level_monitor",
+    enabled: true,
+    enabled_time: 1705829929188,
+    schedule: {
+        period: {
+            interval: 2,
+            unit: "MINUTES"
+        }
+    },
+    inputs: [{
+        search: {
+            indices: ["metricbeat-*"],
+            query: {
+                size: 0,
+                query: {
+                    bool: {
+                        filter: [{
+                            range: {
+                                "@timestamp": {
+                                    from: "{{period_end}}||-1h",
+                                    to: "{{period_end}}",
+                                    include_lower: true,
+                                    include_upper: true,
+                                    format: "epoch_millis",
+                                    boost: 1.0
+                                }
+                            }
+                        }],
+                        adjust_pure_negative: true,
+                        boost: 1.0
+                    }
+                }
+            }
+        }
+    }],
+    triggers: [{
+        query_level_trigger: {
+            id: "mVaAIIgB9ABSfPaZJKV-",
+            name: "High Memory Usage",
+            severity: "1",
+            condition: {
+                script: {
+                    source: `def WARNING_THRESHOLD = ${warningThreshold};\n
+                            def ERROR_THRESHOLD = ${errorThreshold};\n
+                            boolean TRIGGER_RESULT = false;\n
+                            for (hit in ctx.results[0].hits.hits) {\n
+                                def hostMemory = hit._source.${metric}*100;\n
+                                def hostName = hit._source.host.name;\n
+                                if (hostMemory >= WARNING_THRESHOLD) {\n
+                                    if (hostMemory >= ERROR_THRESHOLD) {\n
+                                        hit.alert_error = true;\n
+                                        hit.threshold_value = Math.round(ERROR_THRESHOLD * 100.0) / 100.0;\n
+                                    } else {\n
+                                        hit.alert_warning = true;\n
+                                        hit.threshold_value = Math.round(WARNING_THRESHOLD * 100.0) / 100.0;\n
+                                    }\n
+                                    TRIGGER_RESULT = true;\n
+                                    hit.include_result = true;\n
+                                    hit.clientName = hit._source.client.name;\n
+                                    hit.platformName = hit._source.platform.name;\n
+                                    hit.hostName = hostName;\n
+                                    hit.observed_value = Math.round(hostMemory * 100.0) / 100.0;\n
+                                    hit.eventTime = hit._source['@timestamp'];\n
+                                    def sdf = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSX");\n
+                                    def timestamp = ZonedDateTime.parse(hit._source['@timestamp'], sdf);\n
+                                    ZonedDateTime startOfDay = timestamp.toLocalDate().atStartOfDay(timestamp.getZone());\n
+                                    hit.startTime = startOfDay.toInstant().toEpochMilli();\n
+                                    ZonedDateTime endOfDay = startOfDay.plusHours(23).plusMinutes(59).plusSeconds(59);\n
+                                    hit.endTime = endOfDay.toInstant().toEpochMilli();\n
+                                }\n
+                            }\n
+                            return TRIGGER_RESULT;`,
+                    lang: "painless"
+                }
+            },
+            actions: [{
+                id: "notification339588",
+                name: "Teams Notification",
+                destination_id: "tZZnKIgBynr6KVOG7W-k",
+                message_template: {
+                    source: `{\n
+                        "text": "{{ctx.monitor.name}} alert has been raised, please investigate the issue.\\n\n
+                        {{#ctx.results.0.hits.hits}}{{#include_result}}\\n\n
+                        ====================================\\n
+                          - Event Time : {{ eventTime }}\\n
+                          - Host Name : {{ hostName }}\\n
+                          - Observed Value : {{ observed_value }}\\n
+                          - Threshold Value : {{ threshold_value }}\\n
+                        {{/include_result}}{{/ctx.results.0.hits.hits}}"\n
+                    }`,
+                    lang: "mustache"
+                },
+                throttle_enabled: false,
+                subject_template: {
+                    source: "Alerting Notification action",
+                    lang: "mustache"
+                }
+            }]
+        }
+    }],
+    last_update_time: 1705904103563,
+    data_sources: {
+        query_index: ".opensearch-alerting-queries",
+        findings_index: ".opensearch-alerting-finding-history-write",
+        findings_index_pattern: "<.opensearch-alerting-finding-history-{now/d}-1>",
+        alerts_index: ".opendistro-alerting-alerts",
+        alerts_history_index: ".opendistro-alerting-alert-history-write",
+        alerts_history_index_pattern: "<.opendistro-alerting-alert-history-{now/d}-1>",
+        query_index_mappings_by_type: {},
+        findings_enabled: false
+    },
+    owner: "alerting"
+};
+
+
+            // Perform POST request
+            fetch('http://10.99.21.182:9201/_plugins/_alerting/monitors/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Success:', data);
+                alert('Alert configuration submitted successfully!');
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error submitting alert configuration.');
+            });
+        }
+    </script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+
+
+</body>
+</html>
